@@ -82,7 +82,10 @@ Las pruebas que vale la pena leer primero:
 | `SagaEmisionIT` | Duplicados, rechazos, caída de recaudo y reintentos agotados |
 | `FlujoKafkaIT` | Un evento con el formato de Debezium, entregado dos veces, produce una sola póliza |
 
-El mismo `mvn verify` corre en GitHub Actions con cada cambio (badge de arriba).
+En GitHub Actions, cada cambio ejecuta `mvn verify`, construye las tres imágenes
+y además levanta el entorno completo con `docker compose` (incluido Debezium)
+para recorrer el flujo real: una póliza emitida y una emisión rechazada. El
+badge de arriba muestra el resultado.
 
 ## Cómo ejecutarlo en tu máquina
 
