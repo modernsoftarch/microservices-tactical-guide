@@ -1,0 +1,51 @@
+# Configuración del servicio de emisión.
+# Los valores por defecto sirven para docker compose; en Kubernetes se
+# sobrescriben con variables de entorno.
+spring:
+  application:
+    name: emision
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/emision}
+    username: ${DB_USUARIO:brujula}
+    password: ${DB_CLAVE:brujula}
+  threads:
+    virtual:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVIDORES:localhost:9092}
+    consumer:
+      auto-offset-reset: earliest
+      # Confirmamos el offset solo después de procesar (por defecto en Spring Kafka).
+      enable-auto-commit: false
+
+brujula:
+  kafka:
+    # Tópico al que Debezium enruta los eventos del outbox de cotización.
+    topico-cotizaciones: ${TOPICO_COTIZACIONES:brujula.cotizacion}
+    consumir: true
+  recaudo:
+    url: ${RECAUDO_URL:http://localhost:8083}
+    timeout-conexion: PT1S
+    timeout-lectura: PT3S
+  saga:
+    max-intentos: 5
+    espera-antes-de-reintentar: PT30S
+    reintentar-cada: PT15S
+    reintentos-automaticos: true
+
+server:
+  port: ${PUERTO:8082}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      servicio: ${spring.application.name}

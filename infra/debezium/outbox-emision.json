@@ -1,0 +1,23 @@
+{
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "plugin.name": "pgoutput",
+  "database.hostname": "postgres",
+  "database.port": "5432",
+  "database.user": "brujula",
+  "database.password": "brujula",
+  "database.dbname": "emision",
+  "topic.prefix": "emision",
+  "slot.name": "outbox_emision",
+  "publication.name": "outbox_emision",
+  "publication.autocreate.mode": "filtered",
+  "table.include.list": "public.outbox",
+  "tombstones.on.delete": "false",
+  "transforms": "outbox",
+  "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+  "transforms.outbox.route.by.field": "aggregatetype",
+  "transforms.outbox.route.topic.replacement": "brujula.${routedByValue}",
+  "transforms.outbox.table.fields.additional.placement": "type:header:eventType",
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "header.converter": "org.apache.kafka.connect.storage.StringConverter"
+}

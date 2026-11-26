@@ -1,0 +1,45 @@
+# Configuración de referencia del OpenTelemetry Collector (capítulo 7).
+# Los servicios envían trazas por OTLP; el collector muestrea y reenvía al backend.
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+  batch: {}
+  # Muestreo por cola: guarda TODAS las trazas con error o lentas y el 10% del resto.
+  tail_sampling:
+    decision_wait: 10s
+    policies:
+      - name: errores
+        type: status_code
+        status_code: { status_codes: [ERROR] }
+      - name: lentas
+        type: latency
+        latency: { threshold_ms: 1500 }
+      - name: muestra
+        type: probabilistic
+        probabilistic: { sampling_percentage: 10 }
+  # Datos sensibles fuera de la telemetría: nunca exportes documentos ni tokens.
+  attributes/limpieza:
+    actions:
+      - { key: http.request.header.authorization, action: delete }
+      - { key: cliente.documento, action: hash }
+
+exporters:
+  otlp:
+    endpoint: ${env:OTEL_BACKEND}
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/limpieza, tail_sampling, batch]
+      exporters: [otlp]

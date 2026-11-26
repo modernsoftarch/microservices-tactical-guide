@@ -1,0 +1,30 @@
+# Configuración del servicio de recaudo.
+# Los valores por defecto sirven para docker compose; en Kubernetes se
+# sobrescriben con variables de entorno (SPRING_DATASOURCE_URL, etc.).
+spring:
+  application:
+    name: recaudo
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/recaudo}
+    username: ${DB_USUARIO:brujula}
+    password: ${DB_CLAVE:brujula}
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${PUERTO:8083}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      servicio: ${spring.application.name}

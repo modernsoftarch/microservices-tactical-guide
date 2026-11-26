@@ -1,0 +1,74 @@
+# Despliegue de referencia del servicio de emisión (capítulo 6).
+# Si usas Argo Rollouts, reemplaza este Deployment por infra/k8s/emision-rollout.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emision
+  labels: { app: emision, dominio: polizas }
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: emision }
+  template:
+    metadata:
+      labels: { app: emision, dominio: polizas }
+    spec:
+      terminationGracePeriodSeconds: 40          # > server.shutdown graceful + preStop
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: emision
+          image: ghcr.io/modernsoftarch/brujula-emision:1.0.0   # nunca "latest" en producción
+          ports: [{ containerPort: 8080, name: http }]
+          env:
+            - { name: PUERTO, value: "8080" }
+            - { name: KAFKA_SERVIDORES, value: "kafka-bootstrap.kafka:9092" }
+            - { name: RECAUDO_URL, value: "http://recaudo.recaudo:8080" }
+            - { name: DB_URL, value: "jdbc:postgresql://emision-db:5432/emision" }
+            - name: DB_USUARIO
+              valueFrom: { secretKeyRef: { name: emision-db, key: usuario } }
+            - name: DB_CLAVE
+              valueFrom: { secretKeyRef: { name: emision-db, key: clave } }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 768Mi }              # sin límite de CPU: evita throttling
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 5
+          lifecycle:
+            preStop:
+              sleep: { seconds: 10 }               # deja que el balanceador deje de enviar tráfico
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emision
+spec:
+  selector: { app: emision }
+  ports: [{ port: 8080, targetPort: http, name: http }]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: emision
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: { app: emision }

@@ -1,0 +1,30 @@
+# Configuración del servicio de cotización.
+# Los valores por defecto sirven para docker compose; en Kubernetes se
+# sobrescriben con variables de entorno (SPRING_DATASOURCE_URL, etc.).
+spring:
+  application:
+    name: cotizacion
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cotizacion}
+    username: ${DB_USUARIO:brujula}
+    password: ${DB_CLAVE:brujula}
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${PUERTO:8081}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      servicio: ${spring.application.name}
