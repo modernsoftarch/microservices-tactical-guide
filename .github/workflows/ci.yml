@@ -62,3 +62,29 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: docker compose config --quiet
+
+  punta-a-punta:
+    name: Flujo completo con docker compose
+    runs-on: ubuntu-latest
+    needs: pruebas
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Levantar el entorno
+        run: docker compose up --build -d
+      - name: Esperar a que Debezium registre los conectores
+        run: |
+          for i in $(seq 1 60); do
+            if [ "$(docker compose ps -a --format '{{.Service}} {{.State}} {{.ExitCode}}' | grep registrar-conectores)" = "registrar-conectores exited 0" ]; then
+              docker compose logs registrar-conectores; exit 0
+            fi
+            sleep 5
+          done
+          echo "Los conectores no se registraron a tiempo"; exit 1
+      - name: Póliza emitida (tok_visa)
+        run: ./scripts/demo.sh tok_visa | tee salida.json && grep -q '"EMITIDA"' salida.json
+      - name: Emisión rechazada (tok_fondos_insuficientes)
+        run: ./scripts/demo.sh tok_fondos_insuficientes | tee salida.json && grep -q '"RECHAZADA"' salida.json
+      - name: Logs si algo falla
+        if: failure()
+        run: docker compose logs --tail=200
