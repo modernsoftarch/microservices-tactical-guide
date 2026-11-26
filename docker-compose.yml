@@ -99,7 +99,7 @@ services:
   # Registra los conectores de Debezium cuando las tablas outbox ya existen
   # (las crea Flyway al arrancar cada servicio).
   registrar-conectores:
-    image: curlimages/curl:8.17.0
+    image: curlimages/curl:8.23.0
     depends_on:
       connect: { condition: service_started }
       cotizacion: { condition: service_healthy }
