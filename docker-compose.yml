@@ -1,0 +1,118 @@
+# Entorno local completo de Seguros Brújula.
+#
+#   docker compose up --build -d      # levanta todo (la primera vez tarda: compila los servicios)
+#   ./scripts/demo.sh                 # recorre el flujo cotizar → aceptar → póliza emitida
+#   docker compose down -v            # apaga y borra los datos
+#
+# Puertos en tu máquina:
+#   8081 cotización · 8082 emisión · 8083 recaudo · 29092 Kafka · 18083 Kafka Connect · 5432 PostgreSQL
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    # wal_level=logical: requisito de Debezium para leer el outbox desde el WAL.
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=10", "-c", "max_wal_senders=10"]
+    environment:
+      POSTGRES_USER: brujula
+      POSTGRES_PASSWORD: brujula
+    ports: ["5432:5432"]
+    volumes:
+      - ./infra/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U brujula"]
+      interval: 5s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:4.2.0
+    ports: ["29092:29092"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      retries: 20
+
+  connect:
+    image: quay.io/debezium/connect:3.7
+    ports: ["18083:8083"]
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: brujula-connect
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+
+  recaudo:
+    build: { context: ., args: { SERVICIO: recaudo } }
+    ports: ["8083:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment: &comunes
+      PUERTO: 8080
+      DB_URL: jdbc:postgresql://postgres:5432/recaudo
+      DB_USUARIO: brujula
+      DB_CLAVE: brujula
+    healthcheck: &salud
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8080'"]
+      interval: 5s
+      retries: 30
+
+  cotizacion:
+    build: { context: ., args: { SERVICIO: cotizacion } }
+    ports: ["8081:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      <<: *comunes
+      DB_URL: jdbc:postgresql://postgres:5432/cotizacion
+    healthcheck: *salud
+
+  emision:
+    build: { context: ., args: { SERVICIO: emision } }
+    ports: ["8082:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      recaudo: { condition: service_healthy }
+    environment:
+      <<: *comunes
+      DB_URL: jdbc:postgresql://postgres:5432/emision
+      KAFKA_SERVIDORES: kafka:9092
+      RECAUDO_URL: http://recaudo:8080
+    healthcheck: *salud
+
+  # Registra los conectores de Debezium cuando las tablas outbox ya existen
+  # (las crea Flyway al arrancar cada servicio).
+  registrar-conectores:
+    image: curlimages/curl:8.17.0
+    depends_on:
+      connect: { condition: service_started }
+      cotizacion: { condition: service_healthy }
+      emision: { condition: service_healthy }
+    volumes:
+      - ./infra/debezium:/conectores:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until curl -sf http://connect:8083/connectors > /dev/null; do echo "esperando Kafka Connect..."; sleep 3; done
+        for archivo in /conectores/outbox-*.json; do
+          nombre=$$(basename $$archivo .json)
+          # PUT .../config crea o actualiza el conector: se puede ejecutar varias veces.
+          curl -s -o /dev/null -w "$$nombre: HTTP %{http_code}\n" -X PUT -H "Content-Type: application/json" \
+            --data @$$archivo http://connect:8083/connectors/$$nombre/config
+        done

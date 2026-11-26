@@ -1,0 +1,90 @@
+# Integración continua: compila, ejecuta todas las pruebas y valida las imágenes.
+# GitHub Actions trae Docker, así que Testcontainers levanta PostgreSQL y Kafka reales.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    name: Compilar y probar
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Unitarias (*Test), ArchUnit y de integración con Testcontainers (*IT).
+      - name: mvn verify
+        run: mvn -B -ntp verify
+
+      - name: Publicar reportes de pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportes-pruebas
+          path: |
+            **/target/surefire-reports/
+            **/target/failsafe-reports/
+          if-no-files-found: ignore
+
+  imagenes:
+    name: Construir imágenes
+    runs-on: ubuntu-latest
+    needs: pruebas
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        servicio: [cotizacion, emision, recaudo]
+    steps:
+      - uses: actions/checkout@v5
+      - name: docker build ${{ matrix.servicio }}
+        run: docker build --build-arg SERVICIO=${{ matrix.servicio }} -t brujula/${{ matrix.servicio }}:ci .
+
+  entorno-local:
+    name: Validar docker compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker compose config --quiet
+
+  punta-a-punta:
+    name: Flujo completo con docker compose
+    runs-on: ubuntu-latest
+    needs: pruebas
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Levantar el entorno
+        run: docker compose up --build -d
+      - name: Esperar a que Debezium registre los conectores
+        run: |
+          for i in $(seq 1 60); do
+            if [ "$(docker compose ps -a --format '{{.Service}} {{.State}} {{.ExitCode}}' | grep registrar-conectores)" = "registrar-conectores exited 0" ]; then
+              docker compose logs registrar-conectores; exit 0
+            fi
+            sleep 5
+          done
+          echo "Los conectores no se registraron a tiempo"; exit 1
+      - name: Póliza emitida (tok_visa)
+        run: ./scripts/demo.sh tok_visa | tee salida.json && grep -q '"EMITIDA"' salida.json
+      - name: Emisión rechazada (tok_fondos_insuficientes)
+        run: ./scripts/demo.sh tok_fondos_insuficientes | tee salida.json && grep -q '"RECHAZADA"' salida.json
+      - name: Logs si algo falla
+        if: failure()
+        run: docker compose logs --tail=200

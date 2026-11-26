@@ -1,0 +1,41 @@
+# Alertas de negocio y técnicas (capítulo 7). Formato PrometheusRule (prometheus-operator).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: brujula-emision
+spec:
+  groups:
+    - name: emision
+      rules:
+        - alert: SagaRequiereRevision
+          expr: sum(increase(brujula_emision_sagas_total{resultado="requiere_revision"}[10m])) > 0
+          labels: { severidad: alta }
+          annotations:
+            resumen: "Hay pólizas cobradas o por cobrar que no se pudieron emitir"
+            accion: "Revisar sagas en estado REQUIERE_REVISION y conciliar con recaudo"
+
+        - alert: EmisionSinPolizas
+          # Hubo aceptaciones pero ninguna póliza en 30 min en horario hábil: algo se atascó.
+          expr: sum(increase(brujula_emision_sagas_total{resultado="emitida"}[30m])) == 0
+                and on() hour() >= 13 and on() hour() < 23      # 8:00-18:00 hora Colombia (UTC-5)
+          for: 10m
+          labels: { severidad: media }
+          annotations:
+            resumen: "No se han emitido pólizas en 30 minutos"
+
+        - alert: ErroresHttpEmision
+          expr: |
+            sum(rate(http_server_requests_seconds_count{servicio="emision",status=~"5.."}[5m]))
+            / clamp_min(sum(rate(http_server_requests_seconds_count{servicio="emision"}[5m])), 1) > 0.02
+          for: 5m
+          labels: { severidad: alta }
+          annotations:
+            resumen: "Más del 2% de errores 5xx en emisión"
+
+        - alert: LagConsumidorEmision
+          # Requiere kafka-exporter o el exportador de lag de tu plataforma.
+          expr: sum(kafka_consumergroup_lag{consumergroup="emision"}) > 500
+          for: 10m
+          labels: { severidad: media }
+          annotations:
+            resumen: "Emisión está atrasada procesando cotizaciones aceptadas"
