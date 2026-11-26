@@ -9,7 +9,7 @@ COPY pom.xml .
 COPY servicios servicios
 RUN mvn -B -q -pl servicios/${SERVICIO} -am -DskipTests package
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 ARG SERVICIO
 WORKDIR /app
 RUN useradd --system --uid 10001 brujula
