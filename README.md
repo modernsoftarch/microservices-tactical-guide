@@ -156,6 +156,7 @@ Cada servicio expone `/actuator/health` y `/actuator/prometheus`.
 │   ├── arquitectura.md
 │   ├── mapa-del-libro.md
 │   └── decisiones/      # ADRs
+├── herramientas/       # cocambio.py: análisis de co-cambio (capítulo 2)
 ├── scripts/demo.sh
 ├── docker-compose.yml
 ├── Dockerfile           # una imagen por servicio: --build-arg SERVICIO=...

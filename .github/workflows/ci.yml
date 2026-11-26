@@ -43,6 +43,16 @@ jobs:
             **/target/failsafe-reports/
           if-no-files-found: ignore
 
+  herramientas:
+    name: Herramientas (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: python3 -m unittest discover herramientas -v
+      - run: python3 herramientas/cocambio.py --raiz servicios/
+
   imagenes:
     name: Construir imágenes
     runs-on: ubuntu-latest

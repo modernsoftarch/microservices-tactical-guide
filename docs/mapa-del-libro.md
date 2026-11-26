@@ -7,6 +7,7 @@ código completo, compilado y probado. Cada fila indica dónde buscar.
 |---|---|---|
 | 1. ¿Necesitas microservicios? | Límites claros antes de partir: dominio sin framework, reglas de dependencia verificadas | `servicios/*/src/main/java/.../dominio/`, `ReglasDeArquitecturaTest.java` (en cada servicio) |
 | 2. Descomposición | Un servicio por capacidad de negocio, una base por servicio | `servicios/cotizacion`, `servicios/emision`, `servicios/recaudo`, `infra/postgres/` |
+| | Análisis de co-cambio con el historial de Git | `herramientas/cocambio.py` |
 | 3. Comunicación | Versionado en la ruta (`/api/v1`) | `CotizacionController.java` |
 | | Cliente HTTP declarativo con timeouts | `emision/.../infraestructura/recaudo/RecaudoCliente.java`, `ConfiguracionClienteRecaudo.java` |
 | | Reintentos y bulkhead nativos de Spring 7 (`@Retryable`, `@ConcurrencyLimit`) | `emision/.../infraestructura/recaudo/RecaudoHttp.java` |
