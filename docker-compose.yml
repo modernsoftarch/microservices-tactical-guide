@@ -9,7 +9,7 @@
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:19-alpine
     # wal_level=logical: requisito de Debezium para leer el outbox desde el WAL.
     command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=10", "-c", "max_wal_senders=10"]
     environment:
