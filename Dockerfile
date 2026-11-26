@@ -2,7 +2,7 @@
 #   docker build --build-arg SERVICIO=emision -t brujula/emision .
 # Etapa 1: compila con Maven. Etapa 2: solo el JRE y el jar, usuario sin privilegios.
 
-FROM maven:3.9-eclipse-temurin-21 AS compilacion
+FROM maven:3.9-eclipse-temurin-26 AS compilacion
 ARG SERVICIO
 WORKDIR /src
 COPY pom.xml .
