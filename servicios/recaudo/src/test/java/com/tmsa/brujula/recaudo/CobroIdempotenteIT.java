@@ -109,8 +109,11 @@ class CobroIdempotenteIT {
             }
         }
 
+        // Lo único que importa: la pasarela recibió UN cobro.
         assertThat(pasarela.cobrosEjecutados() - antes).isEqualTo(1);
-        assertThat(resultados).contains("APROBADO").containsOnly("APROBADO", "EN_PROCESO");
+        // Las demás peticiones ven el resultado guardado (APROBADO) o, si llegaron
+        // mientras se cobraba, un 409 (EN_PROCESO) para reintentar después.
+        assertThat(resultados).contains("APROBADO").isSubsetOf("APROBADO", "EN_PROCESO");
     }
 
     private static String nuevaClave() {
